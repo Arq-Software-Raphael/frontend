@@ -6,9 +6,29 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    navigate('/');
+
+    try {
+      const response = await fetch('http://localhost:8000/api/auth/login/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Erro ao fazer login');
+      }
+      const data = await response.json();
+      localStorage.setItem('token', data.access);
+
+      navigate('/');
+    } catch (error) {
+      alert('Email ou senha inválidos. Tente novamente.');
+      console.error('Erro no login:', error);
+    }
   };
 
   return (
@@ -27,6 +47,7 @@ const Login = () => {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Digite seu email"
+            required
           />
           <label style={styles.label}>Senha</label>
           <input
@@ -35,6 +56,7 @@ const Login = () => {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Digite sua senha"
+            required
           />
           <button style={styles.btn} type="submit">
             Entrar
@@ -96,8 +118,8 @@ const styles = {
     fontSize: '1rem',
     borderRadius: '6px',
     border: '1px solid #ccc',
-    color: '#333',  
-    backgroundColor: 'white',        
+    color: '#333',
+    backgroundColor: 'white',
     outline: 'none',
   },
   btn: {

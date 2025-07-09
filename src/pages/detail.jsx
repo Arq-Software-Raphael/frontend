@@ -1,16 +1,48 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+
+const API_BASE_URL = 'http://127.0.0.1:5001';
 
 const NewsDetail = () => {
-  const news = {
-    title: 'Avanços em Inteligência Artificial',
-    content:
-      'Novas descobertas em IA prometem revolucionar diversos setores, desde a saúde até a automação industrial. Pesquisadores estão explorando modelos de linguagem ainda mais complexos e eficientes...',
-    image:
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/John_Leguizamo_2017_%28cropped%29.jpg/440px-John_Leguizamo_2017_%28cropped%29.jpg',
-  };
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [news, setNews] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchNews = async () => {
+      const token = localStorage.getItem('token');
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/news/${id}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error('Erro ao buscar notícia');
+        }
+
+        const data = await response.json();
+        setNews(data);
+      } catch (error) {
+        console.error('Erro ao carregar notícia:', error);
+        alert('Erro ao carregar a notícia');
+        navigate('/');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNews();
+  }, [id, navigate]);
+
+  if (loading) return <p style={{ textAlign: 'center' }}>Carregando...</p>;
+  if (!news) return null;
 
   const handleBack = () => {
-    window.history.back();
+    navigate(-1);
   };
 
   return (
@@ -24,8 +56,19 @@ const NewsDetail = () => {
 
       <main style={styles.container}>
         <div style={styles.newsCard}>
-          <img src={news.image} alt={news.title} style={styles.newsImage} />
+          <img
+            src={
+              news.image_url
+                ? `${API_BASE_URL}${news.image_url}`
+                : 'https://via.placeholder.com/800x300?text=Sem+Imagem'
+            }
+            alt={news.title}
+            style={styles.newsImage}
+          />
           <h2 style={styles.newsTitle}>{news.title}</h2>
+          {news.topic && (
+            <p style={styles.topicText}><strong>Tópico:</strong> {news.topic}</p>
+          )}
           <p style={styles.newsContent}>{news.content}</p>
         </div>
       </main>
@@ -88,6 +131,11 @@ const styles = {
     fontSize: '1.8rem',
     margin: '0 0 1rem 0',
     color: '#2c3e50',
+  },
+  topicText: {
+    fontSize: '1rem',
+    margin: '0 0 1rem 0',
+    color: '#888',
   },
   newsContent: {
     fontSize: '1rem',

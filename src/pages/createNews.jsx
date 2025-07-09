@@ -1,21 +1,93 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { isSuperuser } from "../auth";
+
+
+const API_BASE_URL = "http://127.0.0.1:5001";
 
 const CreateNews = () => {
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [image, setImage] = useState(null);
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [topics, setTopics] = useState([]);
+  const [selectedTopic, setSelectedTopic] = useState("");
+
+  useEffect(() => {
+    if (!isSuperuser()) {
+      alert("Acesso negado. Apenas administradores podem criar notícias.");
+      navigate("/");
+    }
+  }, [navigate]);
+
+  useEffect(() => {
+    const fetchTopics = async () => {
+      const token = localStorage.getItem("token");
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/topics/`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error("Erro ao buscar tópicos");
+        const data = await response.json();
+        setTopics(data);
+      } catch (error) {
+        console.error("Erro ao carregar tópicos:", error);
+      }
+    };
+    fetchTopics();
+  }, []);
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      setImage(URL.createObjectURL(file));
+      setImageFile(file);
+      setImagePreview(URL.createObjectURL(file));
     } else {
-      setImage(null);
+      setImageFile(null);
+      setImagePreview(null);
     }
   };
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!selectedTopic) {
+      alert("Selecione um tópico para a notícia.");
+      return;
+    }
+
+    const token = localStorage.getItem("token");
+    const formData = new FormData();
+
+    formData.append("title", title);
+    formData.append("content", content);
+    formData.append("topic_id", selectedTopic);
+    if (imageFile) {
+      formData.append("image", imageFile);
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/news/`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Erro ao criar notícia");
+      }
+
+      const data = await response.json();
+      console.log("Notícia criada:", data);
+      navigate("/");
+    } catch (error) {
+      console.error("Erro ao enviar notícia:", error);
+      alert("Erro ao criar a notícia.");
+    }
+  };
 
   return (
     <div style={styles.pageContainer}>
@@ -31,7 +103,7 @@ const CreateNews = () => {
       </header>
 
       <main style={styles.container}>
-        <form style={styles.form}>
+        <form style={styles.form} onSubmit={handleSubmit}>
           <label htmlFor="title" style={styles.label}>
             Título
           </label>
@@ -42,6 +114,7 @@ const CreateNews = () => {
             onChange={(e) => setTitle(e.target.value)}
             style={styles.input}
             placeholder="Digite o título da notícia"
+            required
           />
 
           <label htmlFor="content" style={styles.label}>
@@ -54,7 +127,26 @@ const CreateNews = () => {
             style={styles.textarea}
             placeholder="Digite o conteúdo da notícia"
             rows={6}
+            required
           />
+
+          <label htmlFor="topic" style={styles.label}>
+            Tópico
+          </label>
+          <select
+            id="topic"
+            value={selectedTopic}
+            onChange={(e) => setSelectedTopic(e.target.value)}
+            style={styles.select}
+            required
+          >
+            <option value="">Selecione um tópico</option>
+            {topics.map((topic) => (
+              <option key={topic.id} value={topic.id}>
+                {topic.name}
+              </option>
+            ))}
+          </select>
 
           <label htmlFor="image" style={styles.label}>
             Imagem
@@ -67,9 +159,9 @@ const CreateNews = () => {
             style={styles.fileInput}
           />
 
-          {image && (
+          {imagePreview && (
             <img
-              src={image}
+              src={imagePreview}
               alt="Prévia da imagem selecionada"
               style={styles.previewImage}
             />
@@ -155,6 +247,17 @@ const styles = {
     width: "100%",
     boxSizing: "border-box",
     resize: "vertical",
+    backgroundColor: "#fff",
+    color: "#333",
+  },
+  select: {
+    padding: "0.5rem",
+    fontSize: "1rem",
+    borderRadius: "6px",
+    border: "1px solid #ccc",
+    outline: "none",
+    width: "100%",
+    boxSizing: "border-box",
     backgroundColor: "#fff",
     color: "#333",
   },

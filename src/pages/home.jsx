@@ -1,18 +1,100 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { isSuperuser } from "../auth";
+
+const API_BASE_URL = "http://127.0.0.1:5001";
 
 const Feed = () => {
   const navigate = useNavigate();
+  const [news, setNews] = useState([]);
+  const [topics, setTopics] = useState([]);
+  const [followedTopics, setFollowedTopics] = useState([]);
 
-  const [news] = useState([
-    {
-      id: 1,
-      title: "Avanços em Inteligência Artificial",
-      content:
-        "Novas descobertas em IA prometem revolucionar diversos setores, desde a saúde até a automação industrial. Pesquisadores estão explorando modelos de linguagem ainda mais complexos e eficientes...",
-      image: "",
-    },
-  ]);
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Faça login para acessar o portal");
+      navigate("/login");
+      return;
+    }
+
+    const fetchNews = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/news/`, {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) throw new Error("Erro ao buscar notícias");
+
+        const data = await response.json();
+        setNews(data);
+      } catch (error) {
+        console.error("Erro ao carregar notícias:", error);
+        alert("Falha ao carregar notícias. Faça login novamente.");
+        navigate("/login");
+      }
+    };
+
+    const fetchTopics = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/topics/`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error("Erro ao buscar tópicos");
+        const data = await response.json();
+        setTopics(data);
+      } catch (err) {
+        console.warn("Erro ao buscar tópicos:", err);
+      }
+    };
+
+    const fetchFollowedTopics = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/users/followed-topics`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error("Erro ao buscar tópicos seguidos");
+        const data = await response.json();
+        setFollowedTopics(data.map((t) => t.id));
+      } catch (err) {
+        console.warn("Erro ao buscar tópicos seguidos:", err);
+      }
+    };
+
+    fetchNews();
+    fetchTopics();
+    fetchFollowedTopics();
+  }, [navigate]);
+
+  const toggleFollow = async (topicId) => {
+    const token = localStorage.getItem("token");
+    const isFollowing = followedTopics.includes(topicId);
+    const method = isFollowing ? "DELETE" : "POST";
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/topics/${topicId}/follow`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        setFollowedTopics((prev) =>
+          isFollowing ? prev.filter((id) => id !== topicId) : [...prev, topicId]
+        );
+      } else {
+        const error = await response.json();
+        alert(error.msg || "Erro ao seguir/desseguir tópico");
+      }
+    } catch (error) {
+      console.error("Erro ao seguir/desseguir tópico:", error);
+      alert("Erro na comunicação com o servidor");
+    }
+  };
 
   return (
     <div style={styles.pageContainer}>
@@ -21,39 +103,72 @@ const Feed = () => {
         <div style={styles.headerButtons}>
           <button
             style={styles.backBtn}
-            onClick={() => navigate('/notifications')}
-            aria-label="Notificações"
+            onClick={() => navigate("/notifications")}
           >
             Notificações
           </button>
-          <button
-            style={{ ...styles.backBtn, marginLeft: "1rem" }}
-            onClick={() => navigate('/create-news')}
-            aria-label="Criar nova notícia"
-          >
-            Criar nova notícia
-          </button>
+          {isSuperuser() && (
+            <button
+              style={{ ...styles.backBtn, marginLeft: "1rem" }}
+              onClick={() => navigate("/create-news")}
+            >
+              Criar nova notícia
+            </button>
+          )}
         </div>
       </header>
 
       <main style={styles.container}>
         <div style={styles.newsFeed}>
-          {news.map(({ id, image, title, content }) => (
-            <div key={id} style={styles.newsCard}>
-              <img src={image} alt={title} style={styles.newsImage} />
-              <div style={styles.newsContent}>
-                <h3 style={styles.newsTitle}>{title}</h3>
-                <p style={styles.newsText}>{content}</p>
+          {news.length === 0 ? (
+            <p>Nenhuma notícia encontrada.</p>
+          ) : (
+            news.map(({ id, image_url, title, content }) => (
+              <div key={id} style={styles.newsCard}>
+                <img
+                  src={
+                    image_url
+                      ? `${API_BASE_URL}${image_url}`
+                      : "https://via.placeholder.com/400x180?text=Sem+Imagem"
+                  }
+                  alt={title}
+                  style={styles.newsImage}
+                />
+                <div style={styles.newsContent}>
+                  <h3 style={styles.newsTitle}>{title}</h3>
+                  <p style={styles.newsText}>{content}</p>
+                  <button
+                    style={{ ...styles.btn, ...styles.readMoreBtn }}
+                    onClick={() => navigate(`/news-detail/${id}`)}
+                  >
+                    Ver Mais
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <aside style={styles.sidebar}>
+          <h3 style={styles.sidebarTitle}>Tópicos</h3>
+          {topics.map((topic) => {
+            const followed = followedTopics.includes(topic.id);
+            return (
+              <div key={topic.id} style={styles.topicItem}>
+                <span>{topic.name}</span>
                 <button
-                  style={{ ...styles.btn, ...styles.readMoreBtn }}
-                  onClick={() => navigate("/news-detail")}
+                  onClick={() => toggleFollow(topic.id)}
+                  style={{
+                    ...styles.followBtn,
+                    backgroundColor: followed ? "#27ae60" : "#3498db",
+                  }}
                 >
-                  Ver Mais
+                  {followed ? "Seguindo" : "Seguir"}
                 </button>
               </div>
-            </div>
-          ))}
-        </div>
+            );
+          })}
+        </aside>
       </main>
     </div>
   );
@@ -92,7 +207,6 @@ const styles = {
     color: "#fff",
     cursor: "pointer",
     fontSize: "0.9rem",
-    transition: "background-color 0.2s",
   },
   btn: {
     backgroundColor: "#e67e22",
@@ -102,21 +216,19 @@ const styles = {
     color: "#fff",
     cursor: "pointer",
     fontSize: "0.9rem",
-    transition: "background-color 0.2s",
   },
   container: {
+    display: "flex",
+    justifyContent: "center",
     padding: "2rem 1rem",
     width: "100%",
     boxSizing: "border-box",
-    display: "flex",
-    justifyContent: "center",
   },
   newsFeed: {
     display: "flex",
     flexWrap: "wrap",
-    justifyContent: "center",
     gap: "1.5rem",
-    maxWidth: "1200px",
+    maxWidth: "900px",
     width: "100%",
   },
   newsCard: {
@@ -134,7 +246,6 @@ const styles = {
     width: "100%",
     height: "180px",
     objectFit: "cover",
-    display: "block",
   },
   newsContent: {
     padding: "1rem",
@@ -154,6 +265,34 @@ const styles = {
   readMoreBtn: {
     marginTop: "1rem",
     alignSelf: "flex-start",
+  },
+  sidebar: {
+    marginLeft: "2rem",
+    minWidth: "220px",
+    backgroundColor: "#fff",
+    padding: "1rem",
+    borderRadius: "8px",
+    boxShadow: "0 2px 6px rgba(0,0,0,0.1)",
+    height: "fit-content",
+  },
+  sidebarTitle: {
+    margin: "0 0 1rem 0",
+    fontSize: "1.1rem",
+    color: "#2c3e50",
+  },
+  topicItem: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: "0.75rem",
+  },
+  followBtn: {
+    color: "#fff",
+    border: "none",
+    borderRadius: "4px",
+    padding: "0.3rem 0.6rem",
+    fontSize: "0.8rem",
+    cursor: "pointer",
   },
 };
 
