@@ -1,17 +1,63 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { io } from "socket.io-client";
+
+const API_BASE_URL = "http://127.0.0.1:5001";
 
 const Notifications = () => {
   const navigate = useNavigate();
+  const [notifications, setNotifications] = useState([]);
+  const [latestId, setLatestId] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const [notifications] = useState([
-    {
-      id: 1,
-      title: "Novos SUBmarinos disponiveis",
-      content: "O novo modelo de subimarino o sub15 já ta na mão",
-      date: "2025-07-08",
-    },
-  ]);
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      alert("Você precisa estar logado para ver notificações.");
+      navigate("/login");
+      return;
+    }
+
+    const fetchNotifications = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/news/`, {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) throw new Error("Erro ao buscar notificações");
+
+        const data = await response.json();
+
+        const sorted = data.sort(
+          (a, b) => new Date(b.created_at) - new Date(a.created_at)
+        );
+
+        setNotifications(sorted);
+      } catch (error) {
+        console.error("Erro ao buscar notificações:", error);
+        alert("Erro ao carregar notificações.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNotifications();
+
+    const socket = io(API_BASE_URL, {
+      query: { token },
+    });
+
+    socket.on("new_news", (news) => {
+      setNotifications((prev) => [news, ...prev]);
+      setLatestId(news.id);
+    });
+
+    return () => socket.disconnect();
+  }, [navigate]);
 
   return (
     <div style={styles.pageContainer}>
@@ -22,22 +68,44 @@ const Notifications = () => {
           onClick={() => navigate(-1)}
           aria-label="Voltar"
         >
-            Voltar
+          Voltar
         </button>
       </header>
 
       <main style={styles.container}>
-        {notifications.length === 0 ? (
+        {loading ? (
+          <p>Carregando notificações...</p>
+        ) : notifications.length === 0 ? (
           <p style={styles.noNotifications}>Nenhuma notificação no momento.</p>
         ) : (
           <div style={styles.notificationsList}>
-            {notifications.map(({ id, title, content, date }) => (
-              <div key={id} style={styles.notificationCard}>
+            {notifications.map(({ id, title, content, created_at }) => (
+              <div
+                key={id}
+                style={{
+                  ...styles.notificationCard,
+                  ...(id === latestId && styles.highlightCard),
+                }}
+              >
                 <h3 style={styles.notificationTitle}>{title}</h3>
                 <p style={styles.notificationContent}>{content}</p>
-                <span style={styles.notificationDate}>
-                  {new Date(date).toLocaleDateString()}
-                </span>
+                <div style={styles.notificationFooter}>
+                  <span style={styles.notificationDate}>
+                    {new Date(created_at).toLocaleDateString("pt-BR", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                  <button
+                    style={styles.viewButton}
+                    onClick={() => navigate(`/news-detail/${id}`)}
+                  >
+                    Ver Notícia
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -76,7 +144,6 @@ const styles = {
     color: "#fff",
     cursor: "pointer",
     fontSize: "0.9rem",
-    transition: "background-color 0.2s",
   },
   container: {
     padding: "2rem 1rem",
@@ -103,6 +170,11 @@ const styles = {
     padding: "1rem 1.5rem",
     display: "flex",
     flexDirection: "column",
+    transition: "all 0.3s ease",
+  },
+  highlightCard: {
+    backgroundColor: "#eafaf1",
+    border: "2px solid #2ecc71",
   },
   notificationTitle: {
     margin: "0 0 0.5rem 0",
@@ -110,15 +182,27 @@ const styles = {
     color: "#2c3e50",
   },
   notificationContent: {
-    margin: 0,
+    margin: "0 0 1rem 0",
     fontSize: "1rem",
     color: "#555",
   },
+  notificationFooter: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   notificationDate: {
-    marginTop: "0.75rem",
     fontSize: "0.85rem",
     color: "#999",
-    alignSelf: "flex-end",
+  },
+  viewButton: {
+    backgroundColor: "#2980b9",
+    color: "#fff",
+    border: "none",
+    borderRadius: "6px",
+    padding: "0.4rem 0.8rem",
+    fontSize: "0.85rem",
+    cursor: "pointer",
   },
 };
 

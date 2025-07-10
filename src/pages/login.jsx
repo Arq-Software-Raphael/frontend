@@ -23,6 +23,7 @@ const Login = () => {
       }
       const data = await response.json();
       localStorage.setItem('token', data.access);
+      localStorage.setItem('userId', data.user_id);
 
       navigate('/');
     } catch (error) {

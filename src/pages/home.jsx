@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { isSuperuser } from "../auth";
+import io from "socket.io-client";
 
 const API_BASE_URL = "http://127.0.0.1:5001";
 
@@ -9,6 +10,14 @@ const Feed = () => {
   const [news, setNews] = useState([]);
   const [topics, setTopics] = useState([]);
   const [followedTopics, setFollowedTopics] = useState([]);
+
+  const [hasNewNotification, setHasNewNotification] = useState(() => {
+    return localStorage.getItem("hasNewNotification") === "true";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("hasNewNotification", hasNewNotification.toString());
+  }, [hasNewNotification]);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -67,6 +76,34 @@ const Feed = () => {
     fetchNews();
     fetchTopics();
     fetchFollowedTopics();
+
+    const socket = io(API_BASE_URL, {
+      query: { token },
+    });
+
+    socket.on("connect", () => {
+      console.log("Conectado ao WebSocket");
+    });
+
+    socket.on("new_news", (newItem) => {
+      setNews((prev) => [newItem, ...prev]);
+      setHasNewNotification(true);
+      localStorage.setItem("hasNewNotification", "true");
+    });
+
+    socket.on("update_news", (updatedItem) => {
+      setNews((prev) =>
+        prev.map((item) => (item.id === updatedItem.id ? updatedItem : item))
+      );
+    });
+
+    socket.on("delete_news", ({ id }) => {
+      setNews((prev) => prev.filter((item) => item.id !== id));
+    });
+
+    return () => {
+      socket.disconnect();
+    };
   }, [navigate]);
 
   const toggleFollow = async (topicId) => {
@@ -98,15 +135,43 @@ const Feed = () => {
 
   return (
     <div style={styles.pageContainer}>
+      <style>{`
+        @keyframes shake {
+          0% { transform: rotate(0deg); }
+          25% { transform: rotate(2deg); }
+          50% { transform: rotate(-2deg); }
+          75% { transform: rotate(2deg); }
+          100% { transform: rotate(0deg); }
+        }
+
+        @keyframes pulse {
+          0% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.3); opacity: 0.6; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+      `}</style>
+
       <header style={styles.header}>
         <h1 style={styles.title}>Portal de Notícias</h1>
         <div style={styles.headerButtons}>
           <button
-            style={styles.backBtn}
-            onClick={() => navigate("/notifications")}
+            style={{
+              ...styles.backBtn,
+              animation: hasNewNotification
+                ? "shake 0.4s ease-in-out infinite alternate"
+                : "none",
+              position: "relative",
+            }}
+            onClick={() => {
+              setHasNewNotification(false);
+              localStorage.setItem("hasNewNotification", "false");
+              navigate("/notifications");
+            }}
           >
             Notificações
+            {hasNewNotification && <span style={styles.notificationDot}></span>}
           </button>
+
           {isSuperuser() && (
             <button
               style={{ ...styles.backBtn, marginLeft: "1rem" }}
@@ -293,6 +358,16 @@ const styles = {
     padding: "0.3rem 0.6rem",
     fontSize: "0.8rem",
     cursor: "pointer",
+  },
+  notificationDot: {
+    position: "absolute",
+    top: "4px",
+    right: "4px",
+    width: "10px",
+    height: "10px",
+    borderRadius: "50%",
+    backgroundColor: "red",
+    animation: "pulse 1s infinite",
   },
 };
 
