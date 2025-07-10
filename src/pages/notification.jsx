@@ -21,7 +21,7 @@ const Notifications = () => {
 
     const fetchNotifications = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/news/`, {
+        const response = await fetch(`${API_BASE_URL}/api/news/notifications`, {
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
